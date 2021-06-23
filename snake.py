@@ -13,6 +13,7 @@ def build_model():
     model = Sequential()
     model.add(Flatten(input_shape=(1, 11)))
     model.add(Dense(256, activation='relu'))
+    model.add(Dense(256, activation='relu'))
     model.add(Dense(3, activation='linear'))
     return model
 
@@ -291,7 +292,7 @@ def run():
     policy = BoltzmannQPolicy()
     sarsa = SARSAAgent(model=model, policy=policy, nb_actions=env.action_space.n)
     sarsa.compile(Adam(), metrics=['mse'])
-    sarsa.fit(env, nb_steps=100000, visualize=False, verbose=1)
+    sarsa.fit(env, nb_steps=200000, visualize=False, verbose=1)
     sarsa.save_weights('sarsa_snake_naive_3_moves.h5f', overwrite=True)
     scores = sarsa.test(env, nb_episodes=100, visualize=True, verbose=1)
     print('Average score over 100 test games:{}'.format(np.mean(scores.history['episode_reward'])))
