@@ -106,7 +106,7 @@ class SnakeEnv(Env):
     def __init__(self, board_size=15):
         self.board_size = board_size
         self.viewer = None
-        self.snake = Snake(int(board_size / 2), int(board_size / 2), 2)
+        self.snake = Snake(int(board_size / 2) + 1, int(board_size / 2) + 1, 2)
         self.food_x, self.food_y = self.new_food()
         self.state = self.get_state()
         self.steps_left = 300
@@ -127,18 +127,16 @@ class SnakeEnv(Env):
         elif action == 1:
             self.snake.turn_right()
 
+        board = self.construct_board()
         self.snake.move()
         head_x = self.snake.get_head()['x']
         head_y = self.snake.get_head()['y']
         # out of bounds
-        if (head_x == self.board_size) or (head_x == -1):
-            done = True
-            reward = -10
-        elif (head_y == self.board_size) or (head_y == -1):
+        if board[head_x][head_y] == "SNAKE" or board[head_x][head_y] == "WALL":
             done = True
             reward = -10
         # found food
-        elif head_x == self.food_x and head_y == self.food_y:
+        elif board[head_x][head_y] == "FOOD":
             self.snake.grow()
             self.food_x, self.food_y = self.new_food()
             reward = 10
@@ -148,11 +146,6 @@ class SnakeEnv(Env):
             reward = 0
             done = False
             self.steps_left -= 1
-        # Snake eats itself
-        for segment in self.snake.get_segments()[1:]:
-            if head_x == segment['x'] and head_y == segment['y']:
-                done = True
-                reward = -10
 
         if self.steps_left == 0:
             done = True
@@ -192,10 +185,11 @@ class SnakeEnv(Env):
         game_width = screen_width - (2 * screen_buffer)
         game_height = screen_height - (2 * screen_buffer)
 
-        cell_size = game_width / self.board_size
+        cell_size = game_width / (self.board_size + 2)
 
         color_black = (5, 5, 5)
         color_blue = (0, 0, 255)
+        color_red = (200, 0, 0)
         screen = pygame.display.set_mode([screen_width, screen_height])
         # Fill the background with white
         screen.fill((255, 255, 255))
@@ -207,7 +201,7 @@ class SnakeEnv(Env):
 
         # draw rect to box in game
         pygame.draw.rect(screen, color_black, (screen_buffer, screen_buffer, game_width, game_height), width=2)
-        for i in range(self.board_size):
+        for i in range(1, self.board_size + 2):
             # horizontal line
             pygame.draw.line(screen, color_black, (screen_buffer, i * cell_size + screen_buffer),
                              (screen_width - screen_buffer, i * cell_size + screen_buffer))
@@ -226,6 +220,12 @@ class SnakeEnv(Env):
             (self.food_x * cell_size) + screen_buffer + (cell_size / 2), (self.food_y * cell_size) + screen_buffer + (cell_size / 2)),
                            cell_size / 2)
 
+        for x in range(self.board_size + 2):
+            pygame.draw.rect(screen, color_red, (int(x * cell_size) + screen_buffer, screen_buffer, int(cell_size + 1), int(cell_size + 1)))
+            pygame.draw.rect(screen, color_red, (int(x * cell_size) + screen_buffer, int((self.board_size + 1) * cell_size) + screen_buffer, int(cell_size + 1), int(cell_size + 1)))
+            pygame.draw.rect(screen, color_red, (screen_buffer, int(x * cell_size) + screen_buffer, int(cell_size + 1), int(cell_size + 1)))
+            pygame.draw.rect(screen, color_red, (int((self.board_size + 1) * cell_size) + screen_buffer, int(x * cell_size) + screen_buffer, int(cell_size + 1), int(cell_size + 1)))
+
         # Flip the display
         pygame.display.flip()
 
@@ -235,9 +235,16 @@ class SnakeEnv(Env):
             self.viewer = None
 
     def construct_board(self):
-        board = [[None for x in range(self.board_size + 1)] for y in range(self.board_size + 1)]
+        board = [[None for x in range(self.board_size + 2)] for y in range(self.board_size + 2)]
+
         for segment in self.snake.get_segments():
             board[segment["x"]][segment["y"]] = "SNAKE"
+
+        for x in range(self.board_size + 2):
+            board[0][x] = "WALL"
+            board[self.board_size + 1][x] = "WALL"
+            board[x][0] = "WALL"
+            board[x][self.board_size + 1] = "WALL"
         board[self.food_x][self.food_y] = "FOOD"
 
         return board
@@ -262,23 +269,26 @@ class SnakeEnv(Env):
         direction = self.snake.get_direction()
         head_x = self.snake.get_head()['x']
         head_y = self.snake.get_head()['y']
-
-        if direction == 'NORTH':
-            danger_ahead = head_y == 0 or board[head_x][head_y - 1] == 'SNAKE'
-            danger_left = head_x == 0 or board[head_x - 1][head_y] == 'SNAKE'
-            danger_right = head_x == self.board_size or board[head_x + 1][head_y] == 'SNAKE'
+        if board[head_x][head_y] == 'WALL':
+            danger_ahead = True
+            danger_left = True
+            danger_right = True
+        elif direction == 'NORTH':
+            danger_ahead = board[head_x][head_y - 1] == 'SNAKE' or board[head_x][head_y - 1] == 'WALL'
+            danger_left = board[head_x - 1][head_y] == 'SNAKE' or board[head_x - 1][head_y] == 'WALL'
+            danger_right = board[head_x + 1][head_y] == 'SNAKE' or board[head_x + 1][head_y] == 'WALL'
         elif direction == 'EAST':
-            danger_ahead = head_x == self.board_size or board[head_x + 1][head_y] == 'SNAKE'
-            danger_left = head_y == 0 or board[head_x][head_y - 1] == 'SNAKE'
-            danger_right = head_y == self.board_size or board[head_x][head_y + 1] == 'SNAKE'
+            danger_ahead = board[head_x + 1][head_y] == 'SNAKE' or board[head_x + 1][head_y] == 'WALL'
+            danger_left = board[head_x][head_y - 1] == 'SNAKE' or board[head_x][head_y - 1] == 'WALL'
+            danger_right = board[head_x][head_y + 1] == 'SNAKE' or board[head_x][head_y + 1] == 'WALL'
         elif direction == 'SOUTH':
-            danger_ahead = head_y == self.board_size or board[head_x][head_y + 1] == 'SNAKE'
-            danger_left = head_x == 0 or board[head_x - 1][head_y] == 'SNAKE'
-            danger_right = head_x == self.board_size or board[head_x + 1][head_y] == 'SNAKE'
+            danger_ahead = board[head_x][head_y + 1] == 'SNAKE' or board[head_x][head_y + 1] == 'WALL'
+            danger_left = board[head_x - 1][head_y] == 'SNAKE' or board[head_x - 1][head_y] == 'WALL'
+            danger_right = board[head_x + 1][head_y] == 'SNAKE' or board[head_x + 1][head_y] == 'WALL'
         else:
-            danger_ahead = head_x == 0 or board[head_x - 1][head_y] == 'SNAKE'
-            danger_left = head_y == self.board_size or board[head_x][head_y + 1] == 'SNAKE'
-            danger_right = head_y == 0 or board[head_x][head_y - 1] == 'SNAKE'
+            danger_ahead = board[head_x - 1][head_y] == 'SNAKE' or board[head_x - 1][head_y] == 'WALL'
+            danger_left = board[head_x][head_y + 1] == 'SNAKE' or board[head_x][head_y + 1] == 'WALL'
+            danger_right = board[head_x][head_y - 1] == 'SNAKE' or board[head_x][head_y - 1] == 'WALL'
 
         facing_n = direction == 'NORTH'
         facing_e = direction == 'EAST'
@@ -294,7 +304,8 @@ class SnakeEnv(Env):
     def new_food(self):
         import itertools
         import random
-        available_coordinates = list(itertools.product(range(self.board_size), range(self.board_size)))
+        # Exclude walls
+        available_coordinates = list(itertools.product(range(1, self.board_size + 1), range(1, self.board_size + 1)))
         for segment in self.snake.segments:
             if (segment['x'], segment['y']) in available_coordinates:
                 available_coordinates.remove((segment['x'], segment['y']))
