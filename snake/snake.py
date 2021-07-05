@@ -111,6 +111,11 @@ class SnakeEnv(Env):
         self.state = self.get_state()
         self.steps_left = 300
         self.action_space = gym.spaces.Discrete(3)
+        self.scores = []
+        self.mean_scores = []
+        self.total_score = 0
+        self.record = 0
+        self.games_played = 0
 
     def step(self, action):
         err_msg = "%r (%s) invalid" % (action, type(action))
@@ -152,8 +157,19 @@ class SnakeEnv(Env):
         if self.steps_left == 0:
             done = True
 
+        score = self.snake.get_length() - self.snake.initial_length
+        if done:
+            # collect score info for plotting
+            self.games_played += 1
+            self.total_score += score
+            if score > self.record:
+                self.record = score
+            mean_score = self.total_score / self.games_played
+            self.mean_scores.append(mean_score)
+            self.scores.append(score)
+
         self.state = self.get_state()
-        return self.state, reward, done, {'score': self.snake.get_length() - self.snake.initial_length}
+        return self.state, reward, done, {'score': score}
 
     def reset(self):
         self.snake = Snake(int(self.board_size / 2), int(self.board_size / 2), 2)
@@ -285,6 +301,9 @@ class SnakeEnv(Env):
 
         return random.choice(available_coordinates)
 
+    def save_scores(self):
+        np.savez("snake_scores", scores=self.scores, mean_scores=self.mean_scores)
+
 
 def run():
     env = SnakeEnv(15)
@@ -294,7 +313,9 @@ def run():
     sarsa.compile(Adam(), metrics=['mse'])
     sarsa.fit(env, nb_steps=200000, visualize=False, verbose=1)
     sarsa.save_weights('sarsa_snake_naive_3_moves.h5f', overwrite=True)
-    scores = sarsa.test(env, nb_episodes=100, visualize=True, verbose=1)
+    scores = sarsa.test(env, nb_episodes=100, visualize=False, verbose=1)
+    # write scores to file for plotting
+    env.save_scores()
     print('Average score over 100 test games:{}'.format(np.mean(scores.history['episode_reward'])))
 
 
