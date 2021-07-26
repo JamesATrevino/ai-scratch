@@ -11,7 +11,7 @@ from rl.core import Env
 
 def build_model():
     model = Sequential()
-    model.add(Flatten(input_shape=(1, 11)))
+    model.add(Flatten(input_shape=(1, 18)))
     model.add(Dense(256, activation='relu'))
     model.add(Dense(256, activation='relu'))
     model.add(Dense(3, activation='linear'))
@@ -265,41 +265,101 @@ class SnakeEnv(Env):
         print("\n")
 
     def get_state(self):
+        def _is_danger(_board, x, y):
+            return _board[x][y] == 'SNAKE' or _board[x][y] == 'WALL'
+
+        def danger_north():
+            dist = 1
+            while True:
+                if _is_danger(board, head_x, head_y - dist):
+                    return dist
+                dist += 1
+
+        def danger_north_east():
+            dist = 1
+            while True:
+                if _is_danger(board, head_x + dist, head_y - dist):
+                    return dist * 2
+                dist += 1
+
+        def danger_east():
+            dist = 1
+            while True:
+                if _is_danger(board, head_x + dist, head_y):
+                    return dist
+                dist += 1
+
+        def danger_south_east():
+            dist = 1
+            while True:
+                if _is_danger(board, head_x + dist, head_y + dist):
+                    return dist * 2
+                dist += 1
+
+        def danger_south():
+            dist = 1
+            while True:
+                if _is_danger(board, head_x, head_y + dist):
+                    return dist
+                dist += 1
+
+        def danger_south_west():
+            dist = 1
+            while True:
+                if _is_danger(board, head_x - dist, head_y + dist):
+                    return dist * 2
+                dist += 1
+
+        def danger_west():
+            dist = 1
+            while True:
+                if _is_danger(board, head_x - dist, head_y):
+                    return dist
+                dist += 1
+
+        def danger_north_west():
+            dist = 1
+            while True:
+                if _is_danger(board, head_x - dist, head_y - dist):
+                    return dist * 2
+                dist += 1
+
         board = self.construct_board()
         direction = self.snake.get_direction()
         head_x = self.snake.get_head()['x']
         head_y = self.snake.get_head()['y']
         if board[head_x][head_y] == 'WALL':
-            danger_ahead = True
-            danger_left = True
-            danger_right = True
-        elif direction == 'NORTH':
-            danger_ahead = board[head_x][head_y - 1] == 'SNAKE' or board[head_x][head_y - 1] == 'WALL'
-            danger_left = board[head_x - 1][head_y] == 'SNAKE' or board[head_x - 1][head_y] == 'WALL'
-            danger_right = board[head_x + 1][head_y] == 'SNAKE' or board[head_x + 1][head_y] == 'WALL'
-        elif direction == 'EAST':
-            danger_ahead = board[head_x + 1][head_y] == 'SNAKE' or board[head_x + 1][head_y] == 'WALL'
-            danger_left = board[head_x][head_y - 1] == 'SNAKE' or board[head_x][head_y - 1] == 'WALL'
-            danger_right = board[head_x][head_y + 1] == 'SNAKE' or board[head_x][head_y + 1] == 'WALL'
-        elif direction == 'SOUTH':
-            danger_ahead = board[head_x][head_y + 1] == 'SNAKE' or board[head_x][head_y + 1] == 'WALL'
-            danger_left = board[head_x - 1][head_y] == 'SNAKE' or board[head_x - 1][head_y] == 'WALL'
-            danger_right = board[head_x + 1][head_y] == 'SNAKE' or board[head_x + 1][head_y] == 'WALL'
+            danger_north = True
+            danger_north_east = True
+            danger_east = True
+            danger_south_east = True
+            danger_south = True
+            danger_south_west = True
+            danger_west = True
+            danger_north_west = True
         else:
-            danger_ahead = board[head_x - 1][head_y] == 'SNAKE' or board[head_x - 1][head_y] == 'WALL'
-            danger_left = board[head_x][head_y + 1] == 'SNAKE' or board[head_x][head_y + 1] == 'WALL'
-            danger_right = board[head_x][head_y - 1] == 'SNAKE' or board[head_x][head_y - 1] == 'WALL'
+            danger_north = 1 / danger_north()
+            danger_north_east = 1 / danger_north_east()
+            danger_east = 1 / danger_east()
+            danger_south_east = 1 / danger_south_east()
+            danger_south = 1 / danger_south()
+            danger_south_west = 1 / danger_south_west()
+            danger_west = 1 / danger_west()
+            danger_north_west = 1 / danger_north_west()
 
         facing_n = direction == 'NORTH'
         facing_e = direction == 'EAST'
         facing_s = direction == 'SOUTH'
         facing_w = direction == 'WEST'
+        food_dist_x = (1 / abs(self.food_x - self.snake.get_head()['x'])) if self.food_x != self.snake.get_head()['x'] else 0
+        food_dist_y = (1 / abs(self.food_y - self.snake.get_head()['y'])) if self.food_y != self.snake.get_head()['y'] else 0
+
         food_west = self.food_x < self.snake.get_head()['x']
         food_north = self.food_y < self.snake.get_head()['y']
         food_east = self.food_x > self.snake.get_head()['x']
         food_south = self.food_y > self.snake.get_head()['y']
 
-        return np.array([danger_ahead, danger_left, danger_right, facing_n, facing_e, facing_s, facing_w, food_west, food_north, food_east, food_south], dtype=int)
+        return np.array([danger_north, danger_north_east, danger_east, danger_south_east, danger_south, danger_south_west, danger_west, danger_north_west, facing_n, facing_e, facing_s, facing_w, food_dist_x, food_dist_y, food_west, food_north, food_east, food_south], dtype=float)
 
     def new_food(self):
         import itertools
@@ -322,7 +382,7 @@ def run():
     policy = BoltzmannQPolicy()
     sarsa = SARSAAgent(model=model, policy=policy, nb_actions=env.action_space.n)
     sarsa.compile(Adam(), metrics=['mse'])
-    sarsa.fit(env, nb_steps=200000, visualize=False, verbose=1)
+    sarsa.fit(env, nb_steps=300000, visualize=False, verbose=1)
     sarsa.save_weights('sarsa_snake_naive_3_moves.h5f', overwrite=True)
     scores = sarsa.test(env, nb_episodes=100, visualize=False, verbose=1)
     # write scores to file for plotting
